@@ -16,4 +16,4 @@ Meshtastic interactive command-line chat
 * Use the /help command for, funnily enough, help!
 
 # TODO
-Handly screen resizes gracefully
+* Handle screen resizes gracefully
