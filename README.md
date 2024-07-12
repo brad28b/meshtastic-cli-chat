@@ -13,7 +13,7 @@ Meshtastic interactive command-line chat
 * python3 -m venv myvenv
 * pip3 install -r requirements.txt
 
-If using Windows, you will need install curses with:
+If using Windows, you will need to install curses with:
 * pip3 install windows-curses
 
 
