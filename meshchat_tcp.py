@@ -3,8 +3,8 @@ import curses
 from pubsub import pub
 from meshtastic.tcp_interface import TCPInterface
 
-node_ip = '192.168.100.20'  # Replace with your Meshtastic node's IP address
-channel_index = 0;          # Replace with your channel index, usually 0
+node_ip = '192.168.1.20'  # Replace with your Meshtastic node's IP address
+channel_index = 0         # Replace with your channel index, usually 0
 
 def get_node_info(node_ip):
     local = TCPInterface(hostname=node_ip)
@@ -67,6 +67,10 @@ def display_help(stdscr):
 def on_receive(packet, interface, node_list, stdscr, input_text, message_lines):
     try:
         if 'decoded' in packet and packet['decoded'].get('portnum') == 'TEXT_MESSAGE_APP':
+            # Check if the packet is from the specified channel_index
+            if packet.get('channel') != channel_index:
+                return
+
             message = packet['decoded']['payload'].decode('utf-8')
             fromnum = packet['fromId']
             shortname = next((node['user']['shortName'] for node in node_list if node['num'] == fromnum), 'Unknown')
@@ -112,9 +116,9 @@ def on_receive(packet, interface, node_list, stdscr, input_text, message_lines):
             # Refresh the screen
             stdscr.refresh()
 
-    except KeyError as e:
-        # Ignore KeyError for packets without 'decoded' key
-        print(f"Ignoring KeyError: {e}")
+    except KeyError:
+        # Ignore KeyError for packets without 'decoded' key or 'channel' key
+        pass
     except UnicodeDecodeError as e:
         print(f"UnicodeDecodeError: {e}")
 
