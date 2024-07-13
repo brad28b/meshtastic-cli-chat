@@ -27,3 +27,4 @@ If using Windows, you will need to install curses with:
 
 # TODO
 * Handle screen resizes gracefully
+* Handle message acknowledgements
