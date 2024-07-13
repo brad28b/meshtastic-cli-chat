@@ -48,6 +48,7 @@ def display_help(stdscr):
         "/help - Display this help message",
         "/nodes - Display the list of nodes",
         "/msg !nodeId message - Send a private message to nodeId",
+        "Ctrl-C - Quit",
         "",
         "(Press any key to return to chat)"
     ]
