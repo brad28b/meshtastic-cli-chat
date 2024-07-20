@@ -3,7 +3,7 @@ import curses
 from pubsub import pub
 from meshtastic.serial_interface import SerialInterface  # Import SerialInterface for serial communication
 
-serial_port = "/dev/ttyUSB0"  # Replace with your serial port, usually either /dev/ttyUSB0 or /dev/ACM0
+serial_port = "/dev/ttyUSB0"  # Replace with your serial port, usually either /dev/ttyUSB0 or /dev/ttyACM0
 channel_index = 0             # Replace with your channel index, usually 0
 
 def get_node_info():
