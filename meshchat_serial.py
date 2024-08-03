@@ -1,10 +1,17 @@
 import time
 import curses
+import os
 from pubsub import pub
 from meshtastic.serial_interface import SerialInterface  # Import SerialInterface for serial communication
 
-serial_port = "/dev/ttyUSB0"  # Replace with your serial port, usually either /dev/ttyUSB0 or /dev/ttyACM0
-channel_index = 0             # Replace with your channel index, usually 0
+serial_port = "/dev/ttyUSB0"  # Replace with your serial port
+channel_index = 0             # Replace with your channel index
+
+# Determine backspace key code based on the platform
+if os.name == 'nt':  # For Windows
+    BACKSPACE = 8
+else:  # For Unix/Linux
+    BACKSPACE = curses.KEY_BACKSPACE
 
 def get_node_info():
     with SerialInterface(serial_port) as interface:
@@ -26,7 +33,6 @@ def show_loading_screen(stdscr):
     stdscr.clear()
     stdscr.refresh()
 
-    # Calculate center position for "Fetching node list from radio..." text
     height, width = stdscr.getmaxyx()
     text = "Fetching node list from radio..."
     x = width // 2 - len(text) // 2
@@ -36,10 +42,7 @@ def show_loading_screen(stdscr):
     stdscr.refresh()
 
 def display_help(stdscr):
-    # Clear the screen
     stdscr.clear()
-
-    # Display help message
     help_message = [
         "=== Help ===",
         "",
@@ -52,226 +55,172 @@ def display_help(stdscr):
         "(Press any key to return to chat)"
     ]
 
-    # Calculate position to display help message above the horizontal line
-    help_start_y = curses.LINES - len(help_message) - 7  # Adjust for padding and horizontal line
+    help_start_y = curses.LINES - len(help_message) - 7
 
     for idx, line in enumerate(help_message):
         stdscr.addstr(help_start_y + idx, 2, line)
 
-    # Insert a solid horizontal line with padding
-    stdscr.hline(curses.LINES - 3, 2, curses.ACS_HLINE, curses.COLS - 4)  # 2 spaces padding on each side
-
+    stdscr.hline(curses.LINES - 3, 2, curses.ACS_HLINE, curses.COLS - 4)
     stdscr.refresh()
-    stdscr.getch()  # Wait for key press
+    stdscr.getch()
 
 def on_receive(packet, interface, node_list, stdscr, input_text, message_lines):
     try:
         if packet.get('channel') != channel_index:
-            return  # Ignore packets from other channels
+            return
 
         if 'decoded' in packet and packet['decoded'].get('portnum') == 'TEXT_MESSAGE_APP':
             message = packet['decoded']['payload'].decode('utf-8')
             fromnum = packet['fromId']
             shortname = next((node['user']['shortName'] for node in node_list if node['num'] == fromnum), 'Unknown')
             timestamp = time.strftime("%H:%M:%S")
-
-            # Determine if it's a private message (toId is not ^all)
             is_private_message = packet['toId'] != '^all'
-
-            # Split message into lines
             lines = message.splitlines()
 
-            # Push existing messages up
-            while len(message_lines) + len(lines) >= curses.LINES - 5:  # -5 to leave space for the horizontal line, input line, and padding
+            while len(message_lines) + len(lines) >= curses.LINES - 5:
                 message_lines.pop(0)
 
-            # Add each line of the message with timestamp
             for line in lines:
                 if is_private_message:
                     dest_shortname = next((node['user']['shortName'] for node in node_list if node['num'] == packet['toId']), 'Unknown')
                     formatted_msg = f"{timestamp} {shortname} to {packet['toId']} ({dest_shortname}) 📩 {line}"
-                    message_lines.append((formatted_msg, True))  # Store as tuple with PM flag
+                    message_lines.append((formatted_msg, True))
                 else:
                     formatted_msg = f"{timestamp} {shortname}: {line}"
-                    message_lines.append((formatted_msg, False))  # Store as tuple with PM flag
+                    message_lines.append((formatted_msg, False))
 
-            # Clear the screen
             stdscr.clear()
 
-            # Print message lines with padding
-            for idx, (msg, is_pm) in enumerate(message_lines[::-1]):  # Print from bottom to top
+            for idx, (msg, is_pm) in enumerate(message_lines[::-1]):
                 if is_pm:
-                    stdscr.addstr(curses.LINES - 4 - idx, 2, msg, curses.color_pair(2) | curses.A_BOLD)  # 2 spaces padding and 1 line of padding
+                    stdscr.addstr(curses.LINES - 4 - idx, 2, msg, curses.color_pair(2) | curses.A_BOLD)
                 else:
-                    stdscr.addstr(curses.LINES - 4 - idx, 2, msg)  # 2 spaces padding and 1 line of padding
+                    stdscr.addstr(curses.LINES - 4 - idx, 2, msg)
 
-            # Insert a solid horizontal line with padding
-            stdscr.hline(curses.LINES - 3, 2, curses.ACS_HLINE, curses.COLS - 4)  # 2 spaces padding on each side
-
-            # Set the input line with padding
+            stdscr.hline(curses.LINES - 3, 2, curses.ACS_HLINE, curses.COLS - 4)
             stdscr.addstr(curses.LINES - 2, 2, f"{prompt_text} {input_text} ")
             stdscr.move(curses.LINES - 2, 2 + len(prompt_text) + len(input_text) + 1)
 
-            # Refresh the screen
             stdscr.refresh()
 
     except KeyError:
-        pass  # Ignore packets without expected keys
+        pass
     except UnicodeDecodeError as e:
         print(f"UnicodeDecodeError: {e}")
 
 def main(stdscr):
-    showcounter = 0
-
     input_text = ""
     message_lines = []
-    suggestions = []
     display_suggestions = False
 
-    interface = None  # Initialize interface variable
+    interface = None
 
     try:
-        # Initialize curses settings
-        curses.curs_set(1)  # Show cursor
+        curses.curs_set(1)
         curses.start_color()
-        curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_BLACK)  # Default color
-        curses.init_pair(2, curses.COLOR_YELLOW, curses.COLOR_BLACK)  # Yellow for PMs
-
-        # Enable echo mode explicitly
+        curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_BLACK)
+        curses.init_pair(2, curses.COLOR_YELLOW, curses.COLOR_BLACK)
         curses.echo()
 
-        # Show loading screen while retrieving node information
         show_loading_screen(stdscr)
 
-        # Retrieve and parse node information
         node_info = get_node_info()
         node_list = parse_node_info(node_info)
 
-        # Use the first node's short name as the prompt if available
         global prompt_text
         if node_list:
-            prompt_text = f"{node_list[0]['user']['shortName']}:"  # Adjust prompt formatting here
+            prompt_text = f"{node_list[0]['user']['shortName']}:"
         else:
-            prompt_text = "Unknown:"  # Fallback if node list is empty
+            prompt_text = "Unknown:"
 
-        # Clear loading screen and refresh
         stdscr.clear()
         stdscr.refresh()
-
-        # Insert a solid horizontal line with padding
-        stdscr.hline(curses.LINES - 3, 2, curses.ACS_HLINE, curses.COLS - 4)  # 2 spaces padding on each side
-
-        # Set the input line prompt with padding
+        stdscr.hline(curses.LINES - 3, 2, curses.ACS_HLINE, curses.COLS - 4)
         stdscr.addstr(curses.LINES - 2, 2, f"{prompt_text} {input_text} ")
         stdscr.move(curses.LINES - 2, 2 + len(prompt_text) + len(input_text) + 1)
         stdscr.refresh()
 
-        # Subscribe the callback function to message reception
         def on_receive_wrapper(packet, interface):
             on_receive(packet, interface, node_list, stdscr, input_text, message_lines)
 
         pub.subscribe(on_receive_wrapper, "meshtastic.receive")
 
-        # Set up the SerialInterface for message listening
         interface = SerialInterface(serial_port)
-        
-        # Main loop for user interaction
+
         while True:
             key = stdscr.getch()
             if key != curses.ERR:
-                if key == curses.KEY_BACKSPACE or key == 127:
+                if key == BACKSPACE:
                     if len(input_text) > 0:
-                        # Delete character from input_text
                         input_text = input_text[:-1]
-                        display_suggestions = False
-
+                        stdscr.move(curses.LINES - 2, 2 + len(prompt_text) + len(input_text))
+                        stdscr.clrtoeol()  # Clear the rest of the line
                 elif key == curses.KEY_ENTER or key == 10 or key == 13:
                     if input_text.strip() == '/nodes':
-                        # Display nodes
-                        for idx, node in enumerate(node_list[::-1]):  # Print from bottom to top
+                        for idx, node in enumerate(node_list[::-1]):
                             formatted_msg = f"Node {node['num']}: {node['user']['shortName']}"
                             message_lines.append((formatted_msg, False))
 
-                        # Push existing messages up
                         while len(message_lines) >= curses.LINES - 5:
                             message_lines.pop(0)
 
-                        # Clear the input line
                         input_text = ""
-
                     elif input_text.strip().startswith('/msg !'):
-                        # Extract nodeId and message from input
                         command_parts = input_text.strip().split(maxsplit=2)
                         if len(command_parts) >= 3:
                             nodeId = command_parts[1]
                             message = command_parts[2]
-                            # Send private message
                             interface.sendText(message, nodeId, channelIndex=channel_index)
-                            # Display own message immediately
                             timestamp = time.strftime("%H:%M:%S")
                             dest_shortname = next((node['user']['shortName'] for node in node_list if node['num'] == nodeId), 'Unknown')
-                            message_lines.append((f"{timestamp} {prompt_text} to {nodeId} ({dest_shortname}) 📩 {message}", True))  # Store as tuple with PM flag
+                            message_lines.append((f"{timestamp} {prompt_text} to {nodeId} ({dest_shortname}) 📩 {message}", True))
                             input_text = ""
                         else:
                             message_lines.append(("Invalid command format. Use '/msg !nodeId message'", False))
                             input_text = ""
-
                     elif input_text.strip() == '/help':
                         display_help(stdscr)
-                        input_text = ""  # Clear input text after displaying help
-
+                        input_text = ""
                     elif input_text.strip():
-                        # Send regular message
                         interface.sendText(input_text.strip(), channelIndex=channel_index)
-                        # Display own message immediately
                         timestamp = time.strftime("%H:%M:%S")
-                        message_lines.append((f"{timestamp} {prompt_text} {input_text}", False))  # Store as tuple
+                        message_lines.append((f"{timestamp} {prompt_text} {input_text}", False))
                         input_text = ""
 
                     display_suggestions = False
 
-                    # Clear the screen
                     stdscr.clear()
 
-                    # Print message lines with padding
-                    for idx, (msg, is_pm) in enumerate(message_lines[::-1]):  # Print from bottom to top
+                    for idx, (msg, is_pm) in enumerate(message_lines[::-1]):
                         if is_pm:
-                            stdscr.addstr(curses.LINES - 4 - idx, 2, msg, curses.color_pair(2) | curses.A_BOLD)  # 2 spaces padding and 1 line of padding
+                            stdscr.addstr(curses.LINES - 4 - idx, 2, msg, curses.color_pair(2) | curses.A_BOLD)
                         else:
-                            stdscr.addstr(curses.LINES - 4 - idx, 2, msg)  # 2 spaces padding and 1 line of padding
+                            stdscr.addstr(curses.LINES - 4 - idx, 2, msg)
 
-                    # Insert a solid horizontal line with padding
-                    stdscr.hline(curses.LINES - 3, 2, curses.ACS_HLINE, curses.COLS - 4)  # 2 spaces padding on each side
+                    stdscr.hline(curses.LINES - 3, 2, curses.ACS_HLINE, curses.COLS - 4)
 
-                elif 0 <= key <= 255:  # Regular character input
+                elif 0 <= key <= 255:
                     input_text += chr(key)
                     display_suggestions = False
 
-                # Clear the screen
                 stdscr.clear()
 
-                # Print message lines with padding
-                for idx, (msg, is_pm) in enumerate(message_lines[::-1]):  # Print from bottom to top
+                for idx, (msg, is_pm) in enumerate(message_lines[::-1]):
                     if is_pm:
-                        stdscr.addstr(curses.LINES - 4 - idx, 2, msg, curses.color_pair(2) | curses.A_BOLD)  # 2 spaces padding and 1 line of padding
+                        stdscr.addstr(curses.LINES - 4 - idx, 2, msg, curses.color_pair(2) | curses.A_BOLD)
                     else:
-                        stdscr.addstr(curses.LINES - 4 - idx, 2, msg)  # 2 spaces padding and 1 line of padding
+                        stdscr.addstr(curses.LINES - 4 - idx, 2, msg)
 
-                # Insert a solid horizontal line with padding
-                stdscr.hline(curses.LINES - 3, 2, curses.ACS_HLINE, curses.COLS - 4)  # 2 spaces padding on each side
-
-                # Set the input line with padding
+                stdscr.hline(curses.LINES - 3, 2, curses.ACS_HLINE, curses.COLS - 4)
                 stdscr.addstr(curses.LINES - 2, 2, f"{prompt_text} {input_text} ")
                 stdscr.move(curses.LINES - 2, 2 + len(prompt_text) + len(input_text) + 1)
-
-                # Refresh the screen
                 stdscr.refresh()
 
     except KeyboardInterrupt:
         pass
     finally:
         if interface is not None:
-            interface.close()  # Ensure serial interface is closed on exit
+            interface.close()
 
 if __name__ == "__main__":
     curses.wrapper(main)
