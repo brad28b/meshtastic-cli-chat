@@ -180,7 +180,7 @@ def main(stdscr):
         while True:
             key = stdscr.getch()
             if key != curses.ERR:
-                if key == curses.KEY_BACKSPACE or key == 127:
+                if key in (curses.KEY_BACKSPACE, 127, 8):  # Check for backspace, delete, and Ctrl+H
                     if len(input_text) > 0:
                         # Delete character from input_text
                         input_text = input_text[:-1]
@@ -217,41 +217,43 @@ def main(stdscr):
                             message_lines.append(("Invalid command format. Use '/msg !nodeId message'", False))
 
                     elif input_text.strip() == '/help':
-                        display_help(stdscr)  # Display help message
-                        input_text = ""  # Clear input text after displaying help
-
-                    elif input_text.strip():
-                        # Send regular message
-                        local.sendText(input_text.strip(), channelIndex=channel_index)
-                        # Display own message immediately
-                        timestamp = time.strftime("%H:%M:%S")
-                        message_lines.append((f"{timestamp} {prompt_text} {input_text}", False))  # Store as tuple
+                        # Show help screen
+                        display_help(stdscr)
                         input_text = ""
 
-                    display_suggestions = False
+                    else:
+                        # Send public message
+                        local.sendText(input_text, channelIndex=channel_index)
+                        # Display own message immediately
+                        timestamp = time.strftime("%H:%M:%S")
+                        message_lines.append((f"{timestamp} {prompt_text} {input_text}", False))
+                        input_text = ""
 
-                    # Clear the screen
-                    stdscr.clear()
+                    # Push existing messages up
+                    while len(message_lines) >= curses.LINES - 5:
+                        message_lines.pop(0)
 
-                    # Print message lines with padding
-                    for idx, (msg, is_pm) in enumerate(message_lines[::-1]):  # Print from bottom to top
-                        if is_pm:
-                            stdscr.addstr(curses.LINES - 4 - idx, 2, msg, curses.color_pair(2) | curses.A_BOLD)  # 2 spaces padding and 1 line of padding
-                        else:
-                            stdscr.addstr(curses.LINES - 4 - idx, 2, msg)  # 2 spaces padding and 1 line of padding
+                    display_suggestions = False  # Reset suggestions after sending a message
 
-                    # Insert a solid horizontal line with padding
-                    stdscr.hline(curses.LINES - 3, 2, curses.ACS_HLINE, curses.COLS - 4)  # 2 spaces padding on each side
+                elif key == curses.KEY_UP:
+                    if showcounter == 0:
+                        showcounter = len(message_lines)
+                    if showcounter > 1:
+                        showcounter -= 1
 
-                elif 0 <= key <= 255:  # Regular character input
+                elif key == curses.KEY_DOWN:
+                    if showcounter < len(message_lines) - 1:
+                        showcounter += 1
+
+                else:
                     input_text += chr(key)
-                    display_suggestions = False
+                    display_suggestions = True  # Show suggestions on input
 
                 # Clear the screen
                 stdscr.clear()
 
-                # Print message lines with padding
-                for idx, (msg, is_pm) in enumerate(message_lines[::-1]):  # Print from bottom to top
+                # Display message lines
+                for idx, (msg, is_pm) in enumerate(message_lines[-showcounter:][::-1]):  # Print from bottom to top
                     if is_pm:
                         stdscr.addstr(curses.LINES - 4 - idx, 2, msg, curses.color_pair(2) | curses.A_BOLD)  # 2 spaces padding and 1 line of padding
                     else:
@@ -264,14 +266,19 @@ def main(stdscr):
                 stdscr.addstr(curses.LINES - 2, 2, f"{prompt_text} {input_text} ")
                 stdscr.move(curses.LINES - 2, 2 + len(prompt_text) + len(input_text) + 1)
 
-                # Refresh the screen
+                # Display suggestions if applicable
+                if display_suggestions:
+                    # Add code to display suggestions based on input_text
+                    pass
+
                 stdscr.refresh()
 
     except KeyboardInterrupt:
         pass
     finally:
-        # Ensure TCP connection is closed gracefully
-        local.close()
+        # Ensure the interface is closed on exit
+        if local:
+            local.close()
 
 if __name__ == "__main__":
     curses.wrapper(main)
