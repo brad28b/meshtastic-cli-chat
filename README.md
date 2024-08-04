@@ -18,7 +18,7 @@ If using Windows, you will need to install curses with:
 
 
 # Configuration
-* Decide if you will be connecting to your node via TCP or Serial. If using TCP, edit <b>'meshchat_tcp.py'</b>, and configure both your Nodes IP address, and the channel index you want to operate on (normally 0). If using Serial, edit <b>'meshchat_serial.py'</b>, and configure both your serial port address for your node (usually either /dev/ttyUSB0 or /dev/ttyACM0), and the channel index you want to operate on (normally 0).
+* Decide if you will be connecting to your node via TCP or Serial. If using TCP, edit <b>'meshchat_tcp.py'</b>, and configure both your Nodes IP address, and the channel index you want to operate on (normally 0). If using Serial, edit <b>'meshchat_serial.py'</b>, and configure both your serial port address for your node (usually either /dev/ttyUSB0 or /dev/ttyACM0), and the channel index you want to operate on (normally 0). If using Windows, set your serial port like this: "COM4". You can find the COM# in Device Manager.
 
 # Usage
 * If using Serial: python meshchat_serial.py
